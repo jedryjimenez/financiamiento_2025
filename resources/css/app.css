@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+
+:root {
+  --color-primary: #1E88E5;
+  --color-secondary: #AED581;
+  --color-accent: #FFB300;
+  --color-bg: #F5F5F5;
+  --color-text: #263238;
+  --radius: 6px;
+}
+
+.btn-action {
+  width: 40px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: filter .2s;
+}
+
+body {
+  font-family:'Inter', sans-serif;
+  background:var(--color-bg);
+  color:var(--color-text);
+}
+
+.btn-primary:hover { filter:brightness(.9); }
+
+.btn-accent {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #222;
+}
+
+/* Cards, Modales */
+.card, .modal-content {
+  border-radius: var(--radius);
+  border: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,.1);
+}
+
+/* Botones primarios */
+.btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+.btn-primary:hover {
+  filter: brightness(.9);
+}
+
+/* Tablas */
+.table thead {
+ background: #fff;
+border-bottom: 2px solid var(--color-primary);
+}
+
+/* Botones de acento */
+.btn-accent {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #222;
+}
+.btn-accent:hover {
+  filter: brightness(.9);
+}
+
+/* Badges de estado */
+.badge-success { background: var(--color-secondary); }
+.badge-warning { background: var(--color-accent); }
+.badge-danger  { background: #e53935; }
+.badge-secondary { background: #6c757d; }
+
+.kpi-card {
+  border-radius: var(--radius);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* En tu app.css */
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-icon .bi {
+  font-size: 1.1rem;
+}
+
+.table .actions {
+  display: flex;
+  gap: .25rem;
+  justify-content: center;
+}
+
+.btn-action:hover {
+  filter: brightness(.9);
+}
