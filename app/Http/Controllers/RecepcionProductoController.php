@@ -14,12 +14,16 @@ use Barryvdh\DomPDF\Facade\PDF;
 use App\Models\Proveedor;
 use App\Models\RecepcionInsumo;
 use App\Support\CreditoHelper;
+use App\Models\KardexMovimiento;
+
 
 
 class RecepcionProductoController extends Controller
 {
+
     public function index(Request $request)
     {
+        // 1) Consulta principal con filtros
         $query = RecepcionProducto::with('productor');
 
         if ($request->filled('productor_id')) {
@@ -34,7 +38,7 @@ class RecepcionProductoController extends Controller
 
         $recepciones = $query->latest()->paginate(20);
 
-        // Cargar y calcular saldo
+        // 2) Calcular saldo actual de cada productor
         $productores = Productor::with('creditos.detalles', 'creditos.abonos')->get();
         foreach ($productores as $p) {
             $p->saldo_actual = $p->creditos->sum(
@@ -42,12 +46,24 @@ class RecepcionProductoController extends Controller
             );
         }
 
+        // 3) Proveedores (si los usas en la vista)
         $proveedores = Proveedor::all();
 
-        //dd($productores->map(fn($p) => ['nombre' => $p->nombre, 'saldo' => $p->saldo_actual]));
+        // 4) Sólo esos 4 insumos para el modal
+        $insumos = Insumo::whereIn('nombre', ['Maíz', 'Frijoles', 'Café', 'Cacao'])
+            ->pluck('nombre', 'id');
 
-        return view('recepciones.index', compact('recepciones', 'productores', 'proveedores'));
+        // dd($insumos->all());
+
+        // 5) Envío todo a la vista
+        return view('recepciones.index', compact(
+            'recepciones',
+            'productores',
+            'proveedores',
+            'insumos'
+        ));
     }
+
 
     public function create()
     {
@@ -61,125 +77,131 @@ class RecepcionProductoController extends Controller
             );
         }
 
-        // 3) Pasa esa colección a la vista
-        return view('recepciones.create', compact('productores'));
+        // 3) Trae sólo los 4 insumos que quieres permitir
+        $insumos = Insumo::whereIn('nombre', ['Maíz', 'Frijoles', 'Café', 'Cacao'])
+            ->pluck('nombre', 'id');
+
+        // 4) Pásalos a la vista
+        return view('recepciones.create', compact('productores', 'insumos'));
     }
+
 
     public function store(Request $request)
     {
+        // 1) Validar formulario
         $data = $request->validate([
             'productor_id'    => 'required|exists:productors,id',
-            'producto'        => 'required|string|max:255',
+            'insumo_id'       => 'required|exists:insumos,id',
             'cantidad_bruta'  => 'required|numeric|min:0.01',
-            'humedad'         => 'required|numeric|min:0|max:100',
+            'humedad'         => 'required|numeric|min:0|max:100', // [cite: 53]
             'precio_unitario' => 'required|numeric|min:0.01',
             'comentario'      => 'nullable|string|max:1000',
         ]);
 
-        // ===== Cálculos iniciales =====
-        $cantidad_neta = round($data['cantidad_bruta'] * (1 - ($data['humedad'] / 100)), 2);
-        $total_valor   = round($cantidad_neta * $data['precio_unitario'], 2);
+        // 2) Calcular neto y total
+        $cantidadNeta = round($data['cantidad_bruta'] * (1 - $data['humedad'] / 100), 2); // [cite: 54]
+        $totalValor   = round($cantidadNeta * $data['precio_unitario'], 2); // [cite: 55]
 
-        // Cargamos productor con créditos y abonos
+        // 3) Cargar relaciones
         $productor = Productor::with('creditos.detalles', 'creditos.abonos')
-            ->findOrFail($data['productor_id']);
+            ->findOrFail($data['productor_id']); // [cite: 56]
+        $insumo    = Insumo::findOrFail($data['insumo_id']);
 
-        // Preparamos variables para repartir el valor
-        $valorRestante = $total_valor;
-        $abonadoTotal  = 0.0;
+        // Variables para distribuir crédito
+        $valorRestante = $totalValor;
+        $abonadoTotal  = 0;
 
-        DB::beginTransaction();
-        try {
-            // ===== 1) Repartir abono entre TODOS los créditos activos, del más antiguo al más reciente =====
+        $recepcion = null; // Definir la variable aquí para que esté disponible fuera de la transacción
+
+        DB::transaction(function () use (
+            $data,
+            $productor,
+            $insumo,
+            $cantidadNeta,
+            $totalValor,
+            &$valorRestante,
+            &$abonadoTotal,
+            &$recepcion // Pasar por referencia para asignarla dentro
+        ) {
+            // 4) Repartir abonos en créditos vigentes (más antiguos primero)
             $creditos = $productor->creditos
                 ->filter(fn($c) => CreditoHelper::saldoCreditoPorDias($c) > 0)
-                ->sortBy('fecha_entrega'); // orden ascendente
+                ->sortBy('fecha_entrega'); // [cite: 58]
 
-            foreach ($creditos as $credito) {
-                if ($valorRestante <= 0) {
-                    break;
-                }
+            foreach ($creditos as $c) {
+                if ($valorRestante <= 0) break;
+                $saldo    = CreditoHelper::saldoCreditoPorDias($c);
+                $abono    = min($saldo, $valorRestante); // [cite: 60]
+                $kilos    = round($abono / $data['precio_unitario'], 2); // [cite: 61]
 
-                $saldoCredito  = CreditoHelper::saldoCreditoPorDias($credito);
-                $montoAbono    = min($saldoCredito, $valorRestante);
-                $kilosAbonados = round($montoAbono / $data['precio_unitario'], 2);
-
-                if ($montoAbono > 0) {
-                    // 1.1) Crear abono en cada crédito
-                    $credito->abonos()->create([
-                        'monto'             => $montoAbono,
-                        'fecha'             => now()->toDateString(),
-                        'comentario'        => 'Pago con producto: ' . $data['producto'],
+                if ($abono > 0) {
+                    $c->abonos()->create([
+                        'monto'             => $abono,
+                        'fecha'             => now()->toDateString(), // [cite: 62]
+                        'comentario'        => 'Pago con producto',
                         'tipo'              => 'producto',
-                        'producto_nombre'   => $data['producto'],
-                        'producto_cantidad' => $kilosAbonados,
+                        'producto_nombre'   => $insumo->nombre, // [cite: 63]
+                        'producto_cantidad' => $kilos,
                     ]);
+                    $c->increment('abonado', $abono); // [cite: 64]
+                    CreditoHelper::actualizarEstado($c->fresh());
 
-                    // 1.2) Incrementar campo 'abonado'
-                    $credito->increment('abonado', $montoAbono);
-
-                    // 1.3) Refrescar modelo y relaciones
-                    $credito->refresh();
-                    $credito->load('detalles', 'abonos');
-
-                    // 1.4) Marcar estado/pagado si toca
-                    \App\Support\CreditoHelper::actualizarEstado($credito);
-
-                    $valorRestante -= $montoAbono;
-                    $abonadoTotal  += $montoAbono;
+                    $valorRestante -= $abono;
+                    $abonadoTotal  += $abono; // [cite: 64]
                 }
             }
 
-            // ===== 2) Registrar la recepción con totales distribuidos =====
+            // 5) Crear la recepción
             $recepcion = RecepcionProducto::create([
-                'productor_id'    => $data['productor_id'],
-                'producto'        => $data['producto'],
+                'productor_id'    => $productor->id,
+                'insumo_id'       => $insumo->id,
+                'producto'        => $insumo->nombre, // [cite: 66]
                 'cantidad_bruta'  => $data['cantidad_bruta'],
                 'humedad'         => $data['humedad'],
                 'precio_unitario' => $data['precio_unitario'],
-                'cantidad_neta'   => $cantidad_neta,
-                'total_valor'     => $total_valor,
+                'cantidad_neta'   => $cantidadNeta,
+                'total_valor'     => $totalValor, // [cite: 67]
                 'abonado_credito' => $abonadoTotal,
-                'efectivo_pagado' => $valorRestante, // excedente en efectivo
+                'efectivo_pagado' => $valorRestante,
                 'comentario'      => $data['comentario'] ?? null,
             ]);
 
-            // ===== 3) Inventario =====
-            $insumo = Insumo::firstOrCreate(
-                ['nombre' => $data['producto']],
-                ['unidad' => 'LBRS', 'precio_compra' => 0, 'precio_venta' => 0, 'stock_minimo' => 0]
-            );
-            $insumo->increment('stock', $cantidad_neta);
+            // 6) Actualizar stock
+            $insumo->increment('stock', $cantidadNeta); // [cite: 68]
 
-            // ===== 4) Movimiento de caja si hay excedente =====
+            // 7) Registrar entrada en Kardex
+            KardexMovimiento::create([
+                'insumo_id'       => $insumo->id,
+                'tipo'            => 'Entrada',
+                'cantidad'        => $cantidadNeta, // Variable que ya tienes
+                'precio_unitario' => $data['precio_unitario'], // Variable que ya tienes
+                'total'           => $totalValor, // Variable que ya tienes
+                'referencia'      => "Recepción Prod #{$recepcion->id}",
+                'observaciones'   => 'Recepción de producto del productor ' . $productor->nombre,
+                'fecha'           => now(), // [cite: 71]
+            ]);
+
+            // 8) Si hay excedente, registrar egreso en caja
             if ($valorRestante > 0) {
-                $caja = Caja::whereNull('cierre_at')->firstOrFail();
+                $caja = Caja::whereNull('cierre_at')->firstOrFail(); // [cite: 72]
                 $mov  = $caja->movimientos()->create([
                     'fecha'      => now()->toDateString(),
                     'tipo'       => 'egreso',
-                    'concepto'   => 'Pago excedente recepción producto #' . $recepcion->id,
-                    'monto'      => $valorRestante,
+                    'concepto'   => "Excedente recept. prod #{$recepcion->id}",
+                    'monto'      => $valorRestante, // [cite: 74]
                     'automatico' => true,
                 ]);
-                session(['mov_caja' => $mov->id]);
+                session(['mov_caja' => $mov->id]); // [cite: 75]
             }
 
-            // ===== 5) Recalcular saldo del productor =====
-            \App\Support\CreditoHelper::recalcularSaldoProductor($productor->fresh());
+            // 9) Recalcular saldo en todos los créditos del productor
+            // Asegúrate que esta función NO cree entradas en el Kardex.
+            CreditoHelper::recalcularSaldoProductor($productor->fresh()); // [cite: 76]
+        });
 
-            DB::commit();
-
-            return redirect()
-                ->route('recepciones.recibo', $recepcion->id);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-
-            return back()
-                ->with('error', 'Error al registrar la recepción: ' . $e->getMessage())
-                ->withInput();
-        }
+        // 10) Redirigir al PDF de recibo
+        return redirect()->route('recepciones.recibo', $recepcion->id); // [cite: 77]
     }
-
 
     public function exportExcel(Request $request)
     {

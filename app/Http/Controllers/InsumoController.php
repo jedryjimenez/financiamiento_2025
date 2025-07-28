@@ -6,6 +6,7 @@ use App\Models\Insumo;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\InsumosExport;
+use Illuminate\Support\Facades\DB;
 
 class InsumoController extends Controller
 {
@@ -18,21 +19,30 @@ class InsumoController extends Controller
 
     public function list(Request $request)
     {
-        $search  = $request->get('search');
-        $perPage = $request->get('per_page', 10);
-        $perPage = $perPage === 'all' ? null : (int) $perPage;
+        $search   = $request->get('search');
+        $perPage  = $request->get('per_page', 10);
+        $perPage  = $perPage === 'all' ? null : (int)$perPage;
 
+        // 1) Base del query con filtro por nombre
         $query = Insumo::query()
             ->when($search, fn($q) => $q->where('nombre', 'like', "%{$search}%"));
 
+        // 2) Totales sobre TODO el conjunto filtrado
+        $totalCompra = (float) $query->sum(DB::raw('stock * precio_compra'));
+        $totalVenta  = (float) $query->sum(DB::raw('stock * precio_venta'));
+
+        // 3) Aplicar orden y paginación si aplica
         $insumos = $perPage
             ? $query->orderBy('nombre')->paginate($perPage)->withQueryString()
             : $query->orderBy('nombre')->get();
 
-        // Renderizamos SOLO la sección 'table' de la MISMA vista
-        $sections = view('insumos.index', compact('insumos'))->renderSections();
+        // 4) Renderizar solo la sección 'table' de la vista
+        $sections = view('insumos.index', compact('insumos', 'totalCompra', 'totalVenta'))
+            ->renderSections();
 
-        return response()->json(['html' => $sections['table'] ?? '']);
+        return response()->json([
+            'html' => $sections['table'] ?? '',
+        ]);
     }
 
     public function export(Request $request)

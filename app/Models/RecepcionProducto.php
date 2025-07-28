@@ -9,11 +9,12 @@ class RecepcionProducto extends Model
 
     protected $fillable = [
         'productor_id',
+        'insumo_id',
         'producto',
         'cantidad_bruta',
         'humedad',
-        'cantidad_neta',
         'precio_unitario',
+        'cantidad_neta',
         'total_valor',
         'abonado_credito',
         'efectivo_pagado',

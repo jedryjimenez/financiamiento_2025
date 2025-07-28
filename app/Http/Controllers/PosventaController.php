@@ -11,7 +11,9 @@ use App\Models\MovimientoCaja;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Credito;
-use App\Models\CreditoDetalle; // si tu relación se llama detalles()
+use App\Models\CreditoDetalle;
+use App\Support\CreditoHelper;
+use App\Models\KardexMovimiento;
 
 class PosventaController extends Controller
 {
@@ -38,19 +40,20 @@ class PosventaController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'productor_id' => 'nullable|exists:productors,id',
-            'fecha' => 'required|date',
-            'modo' => 'required|in:contado,credito',
-            'paga_con' => 'nullable|numeric|min:0',
-            'items' => 'required|array|min:1',
-            'items.*.insumo_id' => 'required|exists:insumos,id',
-            'items.*.cantidad' => 'required|numeric|min:0.01',
-            'items.*.precio' => 'required|numeric|min:0',
-            'items.*.descuento' => 'nullable|numeric|min:0',
+            'productor_id'        => 'nullable|exists:productors,id',
+            'fecha'               => 'required|date',
+            'modo'                => 'required|in:contado,credito',
+            'paga_con'            => 'nullable|numeric|min:0',
+            'items'               => 'required|array|min:1',
+            'items.*.insumo_id'   => 'required|exists:insumos,id',
+            'items.*.cantidad'    => 'required|numeric|min:0.01',
+            'items.*.precio'      => 'required|numeric|min:0',
+            'items.*.descuento'   => 'nullable|numeric|min:0',
         ]);
 
         if ($data['modo'] === 'credito' && empty($data['productor_id'])) {
-            return back()->with('error', 'Para venta a crédito debe seleccionar un productor.')
+            return back()
+                ->with('error', 'Para venta a crédito debe seleccionar un productor.')
                 ->withInput();
         }
 
@@ -63,93 +66,112 @@ class PosventaController extends Controller
         }
 
         DB::transaction(function () use ($data, $caja) {
-            $subtotal = 0;
+            $subtotal   = 0;
             $descuentos = 0;
-            $detalles = [];
+            $detalles   = [];
 
             foreach ($data['items'] as $item) {
                 $insumo = Insumo::findOrFail($item['insumo_id']);
                 if ($insumo->stock < $item['cantidad']) {
                     throw new \Exception("Stock insuficiente para {$insumo->nombre}");
                 }
-                $lineDiscount = $item['descuento'] ?? 0;
-                $lineSub = ($item['cantidad'] * $item['precio']) - $lineDiscount;
 
-                $subtotal += $item['cantidad'] * $item['precio'];
+                $lineDiscount = $item['descuento'] ?? 0;
+                $lineSub      = ($item['cantidad'] * $item['precio']) - $lineDiscount;
+
+                $subtotal   += $item['cantidad'] * $item['precio'];
                 $descuentos += $lineDiscount;
 
                 $detalles[] = [
-                    'insumo_id' => $insumo->id,
-                    'cantidad' => $item['cantidad'],
-                    'precio_unitario' => $item['precio'],
-                    'descuento' => $lineDiscount,
-                    'subtotal' => $lineSub,
+                    'insumo_id'        => $insumo->id,
+                    'cantidad'         => $item['cantidad'],
+                    'precio_unitario'  => $item['precio'],
+                    'descuento'        => $lineDiscount,
+                    'subtotal'         => $lineSub,
                 ];
 
+                // → Decremento de stock
                 $insumo->decrement('stock', $item['cantidad']);
+
+                // → kardex salida
+                KardexMovimiento::create([
+                    'insumo_id'       => $insumo->id,
+                    'tipo'            => 'Salida',                       // marca salida
+                    'cantidad'        => $item['cantidad'],              // unidades vendidas
+                    'precio_unitario' => $item['precio'],
+                    'total'           => $item['cantidad'] * $item['precio'],
+                    'referencia'      => 'Venta #' . ($venta->id ?? 'XX'),
+                    'observaciones'   => 'Venta ' . ucfirst($data['modo']),
+                    'fecha'           => $data['fecha'],
+                ]);
             }
 
             $total = $subtotal - $descuentos;
 
-            // Registrar siempre venta (para historial)
+            // Registrar la venta principal
             $venta = Venta::create([
-                'productor_id' => $data['productor_id'] ?? null,
-                'fecha' => $data['fecha'],
-                'subtotal' => $subtotal,
-                'descuento_total' => $descuentos,
-                'total' => $total,
-                'paga_con' => $data['modo'] === 'contado' ? ($data['paga_con'] ?? $total) : 0,
-                'cambio' => $data['modo'] === 'contado' ? max(0, ($data['paga_con'] ?? $total) - $total) : 0,
-                'es_credito' => $data['modo'] === 'credito',
+                'productor_id'     => $data['productor_id'] ?? null,
+                'fecha'            => $data['fecha'],
+                'subtotal'         => $subtotal,
+                'descuento_total'  => $descuentos,
+                'total'            => $total,
+                'paga_con'         => $data['modo'] === 'contado' ? ($data['paga_con'] ?? $total) : 0,
+                'cambio'           => $data['modo'] === 'contado'
+                    ? max(0, ($data['paga_con'] ?? $total) - $total)
+                    : 0,
+                'es_credito'       => $data['modo'] === 'credito',
             ]);
 
+            // ahora que $venta->id existe, ajustamos la referencia en kardex
+            foreach (KardexMovimiento::where('referencia', 'Venta #XX')->get() as $mov) {
+                $mov->update(['referencia' => 'Venta #' . $venta->id]);
+            }
+
+            // relacionamos detalles
             foreach ($detalles as $d) {
                 $venta->detalles()->create($d);
             }
 
             if ($data['modo'] === 'contado') {
                 MovimientoCaja::create([
-                    'caja_id' => $caja->id,
-                    'tipo' => 'ingreso',
-                    'monto' => $total,
-                    'fecha' => $data['fecha'],
-                    'concepto' => "Venta #{$venta->id}",
+                    'caja_id'    => $caja->id,
+                    'tipo'       => 'ingreso',
+                    'monto'      => $total,
+                    'fecha'      => $data['fecha'],
+                    'concepto'   => "Venta #{$venta->id}",
                     'automatico' => true,
                 ]);
             } else {
-                // Crear el crédito reutilizando estructura existente
+                // ventas a crédito...
                 $credito = Credito::create([
-                    'productor_id' => $data['productor_id'],
+                    'productor_id'  => $data['productor_id'],
                     'fecha_entrega' => $data['fecha'],
-                    'moneda' => 'C$',
-                    'total' => $total,  // principal
-                    'abonado' => 0,
+                    'moneda'        => 'C$',
+                    'total'         => $total,
+                    'abonado'       => 0,
                 ]);
-
                 foreach ($detalles as $d) {
-                    // El interés para cada insumo: usar tu regla (ej: si frijoles/maiz 0 sino 3)
                     $insumo = Insumo::find($d['insumo_id']);
-                    $tasa = in_array(strtolower($insumo->nombre), ['frijoles', 'maiz']) ? 0 : 3;
-
+                    $tasa   = in_array(strtolower($insumo->nombre), ['frijoles', 'maiz']) ? 0 : 3;
                     $credito->detalles()->create([
-                        'insumo_id' => $d['insumo_id'],
-                        'cantidad' => $d['cantidad'],
+                        'insumo_id'      => $d['insumo_id'],
+                        'cantidad'       => $d['cantidad'],
                         'precio_unitario' => $d['precio_unitario'],
-                        'subtotal' => $d['subtotal'], // capital por línea
-                        'interes' => $tasa,
+                        'subtotal'       => $d['subtotal'],
+                        'interes'        => $tasa,
                     ]);
                 }
-
-                // Actualizar saldo productor (igual que en CreditoController@store)
-                $credito->productor->increment('saldo', $total);
+                CreditoHelper::recalcularSaldoProductor($credito->productor);
             }
         });
 
-        return redirect()->route('posventa.create')
+        return redirect()
+            ->route('posventa.create')
             ->with('success', $data['modo'] === 'credito'
                 ? 'Venta registrada como crédito.'
                 : 'Venta registrada.');
     }
+
 
 
     public function listar()

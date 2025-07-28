@@ -46,7 +46,7 @@
 
 <aside class="sidebar d-flex flex-column">
     <div class="px-3 mb-3 fw-bold">
-        <i class="fa fa-building me-2"></i> {{ config('app.name', 'Empresa') }}
+        <i class="fa fa-building me-2"></i> {{ config('app.name', 'Laravel') }}
     </div>
 
     <a href="{{ route('dashboard') }}" class="menu-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
@@ -62,9 +62,6 @@
     </a>
     <a href="{{ route('creditos.index') }}" class="menu-item {{ request()->routeIs('creditos.*') ? 'active' : '' }}">
         <i class="fa fa-hand-holding-dollar me-2"></i> Créditos
-    </a>
-    <a href="{{ route('cuotas.pagar', 0) }}" class="menu-item {{ request()->routeIs('cuotas.*') ? 'active' : '' }}">
-        <i class="fa fa-calendar-check me-2"></i> Cuotas
     </a>
     <a href="{{ route('proveedores.index') }}" class="menu-item {{ request()->routeIs('proveedores.*') ? 'active' : '' }}">
         <i class="fa fa-truck me-2"></i> Proveedores
@@ -98,6 +95,15 @@
     <div id="menuVentas" class="submenu {{ request()->is('posventa*') ? 'show' : '' }}">
         <a href="{{ route('posventa.create') }}">Punto de Venta</a>
         <a href="{{ route('posventa.index') }}">Listado Ventas</a>
+    </div>
+
+    {{-- Kardex --}}
+    <button class="menu-item toggle-submenu" data-target="#menuKardex">
+        <i class="fa fa-book me-2"></i> Kardex
+        <i class="fa fa-chevron-down float-end small"></i>
+    </button>
+    <div id="menuKardex" class="submenu {{ request()->is('kardex*') ? 'show' : '' }}">
+        <a href="{{ route('kardex.index') }}">Kardex de Productos</a>
     </div>
 
     {{-- Reportes --}}

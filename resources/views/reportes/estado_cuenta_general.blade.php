@@ -24,7 +24,7 @@
         <div class="col-md-3 align-self-end">
             <button class="btn btn-primary">Filtrar</button>
             <a href="{{ route('reportes.estado_cuenta_general.pdf', request()->all()) }}" class="btn btn-danger">PDF</a>
-            <a href="{{ route('estadoCuentaGeneral.export.excel') }}" class="btn btn-success">Exportar a Excel</a>
+            <a href="{{ route('reportes.estado_cuenta_general.excel', request()->all()) }}" class="btn btn-success">Excel</a>
         </div>
     </form>
 

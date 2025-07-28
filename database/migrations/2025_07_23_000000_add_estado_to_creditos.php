@@ -1,5 +1,7 @@
 <?php
 
+//2025_07_23_000000_add_estado_to_creditos.php
+
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;

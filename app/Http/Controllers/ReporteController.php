@@ -382,7 +382,7 @@ class ReporteController extends Controller
             $p->creditos_activos = $p->creditos->count();
             $p->total_deuda = $p->creditos->sum(fn($c) => CreditoHelper::saldoCreditoPorDias($c));
             return $p;
-        })->filter(fn($p) => $p->creditos_activos > 1)->values();
+        })->filter(fn($p) => $p->creditos_activos > 0)->values();
 
         return view('reportes.productores_creditos_activos', compact('productores'));
     }

@@ -13,6 +13,7 @@ use App\Http\Controllers\CajaController;
 use App\Http\Controllers\PosventaController;
 use App\Http\Controllers\RecepcionProductoController;
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\KardexController;
 
 Route::get('/', fn() => view('login'));
 
@@ -103,6 +104,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('reportes/productores-creditos-activos',         [ReporteController::class, 'productoresConCreditosActivos'])->name('reportes.productores_creditos_activos');
     Route::get('reportes/productores-creditos-activos/pdf',     [ReporteController::class, 'exportarPDF'])->name('reportes.productores_creditos_activos.pdf');
     Route::get('reportes/productores-creditos-activos/excel',   [ReporteController::class, 'exportarExcel'])->name('reportes.productores_creditos_activos.excel');
+
+
+    /** Kardex **/
+    Route::get('kardex', [KardexController::class, 'index'])->name('kardex.index');
 });
 
 require __DIR__ . '/auth.php';

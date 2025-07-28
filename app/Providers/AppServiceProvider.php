@@ -7,6 +7,10 @@ use App\Models\Insumo;
 use App\Models\Credito;
 use App\Observers\CreditoObserver;
 use Illuminate\Support\Facades\View;
+use App\Models\RecepcionItem;
+use App\Observers\RecepcionItemObserver;
+use App\Models\RecepcionProducto;
+use App\Observers\RecepcionProductoObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,5 +37,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Credito::observe(CreditoObserver::class);
+
+        RecepcionItem::observe(RecepcionItemObserver::class);
+
+        RecepcionProducto::observe(RecepcionProductoObserver::class);
     }
 }

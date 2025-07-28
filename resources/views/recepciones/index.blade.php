@@ -140,8 +140,13 @@
 
           <div class="row g-3 mb-2">
             <div class="col-md-6">
-              <label class="form-label">Producto</label>
-              <input type="text" name="producto" class="form-control" placeholder="Ej. Café" required>
+              <label for="insumo_id" class="form-label">Producto</label>
+              <select name="insumo_id" id="insumo_id" class="form-select" required>
+                <option value="">-- Seleccione --</option>
+                @foreach($insumos as $id => $nombre)
+                  <option value="{{ $id }}" @selected(old('insumo_id') == $id)>{{ $nombre }}</option>
+                @endforeach
+              </select>
             </div>
             <div class="col-md-6">
               <label class="form-label">Precio por libra (C$)</label>

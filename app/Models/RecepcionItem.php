@@ -11,10 +11,16 @@ class RecepcionItem extends Model
         'recepcion_id',
         'insumo_id',
         'cantidad',
+        'precio_unitario',
         'precio_compra',
         'precio_venta',
         'subtotal',
     ];
+
+    public function recepcion()
+    {
+        return $this->belongsTo(RecepcionInsumo::class, 'recepcion_id');
+    }
 
     public function insumo()
     {
