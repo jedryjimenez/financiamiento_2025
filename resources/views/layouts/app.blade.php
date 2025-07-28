@@ -28,41 +28,47 @@
 </head>
 
 <body>
+    <body>
     <div class="layout-wrapper">
-        {{-- Sidebar --}}
-        @include('partials.sidebar')
+        {{-- Sidebar solo si el usuario está autenticado --}}
+        @auth
+            @include('partials.sidebar')
+        @endauth
 
         {{-- Contenido principal --}}
         <div class="main-content">
 
-            {{-- alerta inicialmente oculta con CSS para fade --}}
-            @if(isset($alertasStockCritico) && $alertasStockCritico->isNotEmpty())
-                <div id="stockAlert" class="container-fluid mt-3 alert alert-warning alert-dismissible fade" role="alert"
-                    style="display:none; opacity:0; transition: opacity .6s;">
-                    <strong>¡Atención!</strong>
-                    Hay {{ $alertasStockCritico->count() }} insumos con stock por debajo del mínimo.
-                    <ul class="mt-2 mb-2">
-                        @foreach($alertasStockCritico as $insumo)
-                            <li>
-                                {{ $insumo->nombre }}: {{ $insumo->stock }} (mín. {{ $insumo->stock_minimo }})
-                                <a href="{{ route('insumos.stock_minimo') }}" class="alert-link">(Ver todos)</a>
-                            </li>
-                        @endforeach
-                    </ul>
-                    <div class="mt-2">
-                        <a href="#" id="noShowStockAlert" class="small text-decoration-underline">
-                            No volver a mostrar
-                        </a>
+            {{-- Mostrar alerta solo a usuarios autenticados --}}
+            @auth
+                @if(isset($alertasStockCritico) && $alertasStockCritico->isNotEmpty())
+                    <div id="stockAlert" class="container-fluid mt-3 alert alert-warning alert-dismissible fade"
+                        role="alert" style="display:none; opacity:0; transition: opacity .6s;">
+                        <strong>¡Atención!</strong>
+                        Hay {{ $alertasStockCritico->count() }} insumos con stock por debajo del mínimo.
+                        <ul class="mt-2 mb-2">
+                            @foreach($alertasStockCritico as $insumo)
+                                <li>
+                                    {{ $insumo->nombre }}: {{ $insumo->stock }} (mín. {{ $insumo->stock_minimo }})
+                                    <a href="{{ route('insumos.stock_minimo') }}" class="alert-link">(Ver todos)</a>
+                                </li>
+                            @endforeach
+                        </ul>
+                        <div class="mt-2">
+                            <a href="#" id="noShowStockAlert" class="small text-decoration-underline">
+                                No volver a mostrar
+                            </a>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
-                </div>
-            @endif
+                @endif
+            @endauth
 
             <div class="container mt-4">
                 @yield('content')
             </div>
         </div>
     </div>
+
 
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>

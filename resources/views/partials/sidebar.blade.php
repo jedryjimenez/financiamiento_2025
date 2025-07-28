@@ -116,4 +116,16 @@
         <a href="{{ route('reportes.ficha_productor') }}">Ficha Productor</a>
         <a href="{{ route('reportes.productores_creditos_activos') }}">Créditos Activos</a>
     </div>
+
+    {{-- Usuario y cerrar sesión --}}
+    <a href="{{ route('profile.edit') }}" class="menu-item {{ request()->routeIs('profile.*') ? 'active' : '' }}">
+        <i class="fa fa-user me-2"></i> Mi Perfil
+    </a>
+
+    <form method="POST" action="{{ route('logout') }}">
+        @csrf
+        <button type="submit" class="menu-item w-100 text-start">
+            <i class="fa fa-sign-out-alt me-2"></i> Cerrar sesión
+        </button>
+    </form>
 </aside>

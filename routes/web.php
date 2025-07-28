@@ -15,7 +15,7 @@ use App\Http\Controllers\RecepcionProductoController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\KardexController;
 
-Route::get('/', fn() => view('login'));
+Route::get('/', fn() => redirect()->route('dashboard'));
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
